@@ -79,3 +79,6 @@ def seen_before(from_ip, to_ip, ips_arr=recorded_addrs):
     """
     lookup_str = "{} -> {}".format(from_ip, to_ip)
     return lookup_str in ips_arr
+
+if __name__ == "__main__":
+    main()
