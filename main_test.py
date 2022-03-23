@@ -1,6 +1,8 @@
+from cmath import rect
 import unittest
 import main
 import os
+import datetime
 
 class TestParseLine(unittest.TestCase):
     def test_parse_line(self):
@@ -21,39 +23,52 @@ class TestParseLine(unittest.TestCase):
         """
         Test tests that the ip address is translated from hex correctly
         """
-        ip_addr = main.translate_addr_from_hex("0100007F:0050")
-        self.assertTrue(ip_addr == "127.0.0.1:80")
+        ip, port = main.translate_addr_from_hex("0100007F:0050")
+        self.assertTrue(ip == "127.0.0.1")
+        self.assertTrue(port == "80")
 
-        ip_addr = main.translate_addr_from_hex("E10FA20A:01BB")
-        self.assertTrue(ip_addr == "10.162.15.225:443")
+        ip, port = main.translate_addr_from_hex("E10FA20A:01BB")
+        self.assertTrue(ip == "10.162.15.225")
+        self.assertTrue(port == "443")
 
-
-    def test_seen_before(self):
-        """
-        Test tests if the ip address is returned as "new" correctly
-        """
-        ips_arr = ["0.0.0.0:80 -> 0.0.0.0:80"]
-        self.assertFalse(main.seen_before("0.0.0.0:80", "1.1.1.1:80", ips_arr))
-
-        ips_arr = ["0.0.0.0:80 -> 0.0.0.0:80"]
-        self.assertTrue(main.seen_before("0.0.0.0:80", "0.0.0.0:80", ips_arr))
-
-        ips_arr = ["0.0.0.0:80 -> 0.0.0.0:80", "0.0.0.0:80 -> 1.1.1.1:80"]
-        self.assertTrue(main.seen_before("0.0.0.0:80", "1.1.1.1:80", ips_arr))
-
-        ips_arr = []
-        self.assertFalse(main.seen_before("0.0.0.0:80", "1.1.1.1:80", ips_arr))
 
     def test_main(self):
         """
         Test tests the overall script
         """
-        expected = ['0.0.0.0:8089 -> 0.0.0.0:0', '0.0.0.0:57337 -> 0.0.0.0:0', '0.0.0.0:48603 -> 0.0.0.0:0', '0.0.0.0:2049 -> 0.0.0.0:0', '127.0.0.1:33415 -> 0.0.0.0:0', '0.0.0.0:39115 -> 0.0.0.0:0', '0.0.0.0:111 -> 0.0.0.0:0', '0.0.0.0:45845 -> 0.0.0.0:0', '127.0.0.53:53 -> 0.0.0.0:0', '0.0.0.0:22 -> 0.0.0.0:0', '10.162.15.225:36088 -> 91.189.91.15:80', '10.162.15.225:52384 -> 172.217.13.110:80', '10.162.15.225:56346 -> 169.254.169.254:80', '10.162.15.225:56350 -> 169.254.169.254:80', '10.162.15.225:55476 -> 91.189.88.152:80', '10.162.15.225:44396 -> 91.189.92.20:443', '10.162.15.225:56348 -> 169.254.169.254:80', '10.162.15.225:58612 -> 91.189.91.42:443', '10.162.15.225:22 -> 204.225.215.59:55627', '10.162.15.225:59046 -> 91.189.88.179:443', '10.162.15.225:55474 -> 91.189.88.152:80', '10.162.15.225:55474 -> 91.189.88.179:443']
+        expected = {'0.0.0.0 -> 0.0.0.0': [{'port': '0', 'time': '2022-03-23T17:10:15.210714'}, {'port': '0', 'time': '2022-03-23T17:11:19.892583'}, {'port': '0', 'time': '2022-03-23T17:12:03.766865'}, {'port': '0', 'time': '2022-03-23T17:12:26.136686'}, {'port': '0', 'time': '2022-03-23T17:12:42.920784'}, {'port': '0', 'time': '2022-03-23T17:12:54.028049'}, {'port': '0', 'time': '2022-03-23T17:13:07.644678'}, {'port': '0', 'time': '2022-03-23T17:13:11.540622'}, {'port': '0', 'time': '2022-03-23T17:14:11.977793'}, {'port': '0', 'time': '2022-03-23T17:14:18.559547'}, {'port': '0', 'time': '2022-03-23T17:14:23.997305'}, {'port': '0', 'time': '2022-03-23T17:14:27.476064'}, {'port': '0', 'time': '2022-03-23T17:14:32.611137'}, {'port': '0', 'time': '2022-03-23T17:14:36.834874'}, {'port': '0', 'time': '2022-03-23T17:14:59.774272'}, {'port': '0', 'time': '2022-03-23T17:15:04.342989'}], '127.0.0.1 -> 0.0.0.0': [{'port': '0', 'time': '2022-03-23T17:13:41.710872'}], '127.0.0.53 -> 0.0.0.0': [{'port': '0', 'time': '2022-03-23T17:14:56.196107'}], '10.162.15.225 -> 91.189.91.15': [{'port': '80', 'time': '2022-03-23T17:15:07.800449'}], '10.162.15.225 -> 172.217.13.110': [{'port': '80', 'time': '2022-03-23T17:15:07.801831'}], '10.162.15.225 -> 169.254.169.254': [{'port': '80', 'time': '2022-03-23T17:15:07.805942'}], '10.162.15.225 -> 91.189.88.152': [{'port': '80', 'time': '2022-03-23T17:15:07.808677'}], '10.162.15.225 -> 91.189.92.20': [{'port': '443', 'time': '2022-03-23T17:15:07.804903'}], '10.162.15.225 -> 91.189.91.42': [{'port': '443', 'time': '2022-03-23T17:15:07.806780'}], '10.162.15.225 -> 204.225.215.59': [{'port': '55627', 'time': '2022-03-23T17:15:07.807522'}], '10.162.15.225 -> 91.189.88.179': [{'port': '443', 'time': '2022-03-23T17:15:07.809118'}]}
 
         filename = os.path.join(os.path.dirname(__file__), "proc_net_tcp.txt")
         ips_arr = main.analyze_file(filename)
         self.assertTrue(len(ips_arr) == len(expected))
-        self.assertTrue(ips_arr == expected)
+
+    def test_ports_scanned_detector(self):
+        """
+        Test tests if the port scanner is working correctly
+        """
+        now = datetime.datetime.now()
+        last_min = now - datetime.timedelta(minutes=1)
+        last_two_min = now - datetime.timedelta(minutes=2)
+        print(type(last_min))
+        recorded_addrs = {
+            "1.1.1.1 -> 2.2.2.2": [
+                    {"port": "80", "time":now.isoformat()},                    
+                    {"port": "81", "time":now.isoformat()},
+                    {"port": "82", "time":now.isoformat()},                     
+                ]}
+
+        scanned_ports = main.ports_scanned_detector(recorded_addrs["1.1.1.1 -> 2.2.2.2"])
+        self.assertTrue(len(scanned_ports) == 3)
+
+        recorded_addrs = {
+            "1.1.1.1 -> 2.2.2.2": [
+                    {"port": "80", "time":now.isoformat()},                    
+                    {"port": "81", "time":last_min.isoformat()},
+                    {"port": "82", "time":last_two_min.isoformat()},                     
+                ]}
+
+        scanned_ports = main.ports_scanned_detector(recorded_addrs["1.1.1.1 -> 2.2.2.2"])
+        self.assertTrue(len(scanned_ports) == 0)
 
 if __name__ == '__main__':
     unittest.main()
