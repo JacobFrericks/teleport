@@ -1,8 +1,9 @@
 import socket
 import struct
-import sched, time
+import time
+import datetime
 
-recorded_addrs = []
+recorded_addrs = {}
 
 def main():
     while (True):
@@ -20,21 +21,52 @@ def analyze_file(path="/proc/net/tcp.txt", ips_arr=recorded_addrs):
     try:
         f = open(path, "r")
         for line in f:
-           # Skip header line, if it exists
-           if "local_address" in line:
+            # Skip header line, if it exists
+            if "local_address" in line:
                continue
-           # Get both the "from" and "to" ips and their ports
-           from_ip, to_ip = parse_line(line)
-           # Translate them from hex
-           from_ip = translate_addr_from_hex(from_ip)
-           to_ip = translate_addr_from_hex(to_ip)
-           fmt_str = "{} -> {}".format(from_ip, to_ip)
-           # Check if they're new
-           if fmt_str not in ips_arr:
-                # Save for future reference
-                ips_arr.append(fmt_str) 
-                # Print it out
-                print("New connection: {}".format(fmt_str))
+            # Get both the "from" and "to" ips and their ports
+            from_ip, to_ip = parse_line(line)
+            # Translate them from hex
+            from_ip, from_port = translate_addr_from_hex(from_ip)
+            from_ip_port = "{}:{}".format(from_ip, from_port)
+            to_ip, to_port = translate_addr_from_hex(to_ip)
+            to_ip_port = "{}:{}".format(to_ip, to_port)
+
+            # Check if they're new
+            
+            # idea = {"1.1.1.1 -> 2.2.2.2": [{"port": "80", "time":"1:30pm"}]}
+            # Port scan
+            fmt_str = "{} -> {}".format(from_ip, to_ip)
+            for ip in ips_arr:    
+                if fmt_str == ip:
+                    scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
+                    if scanned_ports:
+                        print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
+                    
+                    # Add into dict for future reference
+                    ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
+                    print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
+                    break
+                else:
+                    # Add into dict for future reference
+                    ips_arr[fmt_str] = [{"port": to_port, "time": get_now()}]
+                    print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
+                    break
+            else:
+                # Add into dict for future reference
+                ips_arr[fmt_str] = [{"port": to_port, "time": get_now()}]
+                print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
+                    
+
+                # print(ips_arr)
+                # print(from_ip)
+                # if from_ip not in ips_arr and to_ip not in ips_arr[from_ip]["ips"]:
+                #     # Save for future reference
+                #     if from_ip not in ips_arr:
+                #         ips_arr.append(from_ip)
+                #     ips_arr[from_ip].append({to_ip})
+                #     # Print it out
+                #     print("New connection: {} -> {}".format(from_ip, to_ip))
         return ips_arr
     except IOError:
         print("Failed to open/read from file '%s'" % (path))
@@ -67,15 +99,25 @@ def translate_addr_from_hex(hex_addr):
 
     port = str(int(hex_port, 16))
 
-    return "{}:{}".format(ip, port)
+    return ip, port
 
-def seen_before(from_ip, to_ip, ips_arr=recorded_addrs):
-    """Determines if we have seen this to/from ip address combination before.
-    
-    Keyword arguments:
-    from_ip -- The ip address that the network traffic is coming from
-    to_ip -- The ip address that the network traffic is targeting
-    ips_arr -- (optional) The in-memory array that stores what has been seen before
-    """
-    lookup_str = "{} -> {}".format(from_ip, to_ip)
-    return lookup_str in ips_arr
+def ports_scanned_detector(port_times):
+    new_date = datetime.datetime.now()
+    ports_scanned_in_last_min = []
+    for obj in port_times:
+        if obj["port"] not in ports_scanned_in_last_min:
+            old_date = datetime.datetime.fromisoformat(obj["time"])
+            date_diff = new_date - old_date
+            if date_diff.total_seconds() <= 60:
+                ports_scanned_in_last_min.append(obj["port"])
+    if len(ports_scanned_in_last_min) >= 3:
+        return ports_scanned_in_last_min
+    return []
+
+def get_now():
+    return datetime.datetime.now().isoformat()
+
+    # print(port_times)
+
+if __name__ == "__main__":
+    main()
