@@ -10,7 +10,7 @@ def main():
         analyze_file()
         time.sleep(10)
 
-def analyze_file(path="/proc/net/tcp.txt", ips_arr=recorded_addrs):
+def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
