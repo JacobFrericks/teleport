@@ -1,9 +1,11 @@
+from prometheus_client import Counter
 import socket
 import struct
 import time
 import datetime
 
 recorded_addrs = {}
+c = Counter('my_failures', 'Description of counter')
 
 def main():
     while (True):
@@ -28,13 +30,8 @@ def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
             from_ip, to_ip = parse_line(line)
             # Translate them from hex
             from_ip, from_port = translate_addr_from_hex(from_ip)
-            from_ip_port = "{}:{}".format(from_ip, from_port)
             to_ip, to_port = translate_addr_from_hex(to_ip)
-            to_ip_port = "{}:{}".format(to_ip, to_port)
 
-            # Check if they're new
-            
-            # idea = {"1.1.1.1 -> 2.2.2.2": [{"port": "80", "time":"1:30pm"}]}
             # Port scan
             fmt_str = "{} -> {}".format(from_ip, to_ip)
             for ip in ips_arr:    
@@ -42,37 +39,22 @@ def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
                     scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
                     if scanned_ports:
                         print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
-                    
-                    # Add into dict for future reference
-                    ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
-                    print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
+                    # Save connection for future reference
+                    new_connection(from_ip, from_port, to_ip, to_port)
                     break
                 else:
-                    # Add into dict for future reference
-                    ips_arr[fmt_str] = [{"port": to_port, "time": get_now()}]
-                    print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
+                    # Save connection for future reference
+                    new_connection(from_ip, from_port, to_ip, to_port)
                     break
             else:
-                # Add into dict for future reference
-                ips_arr[fmt_str] = [{"port": to_port, "time": get_now()}]
-                print("New connection: {} -> {}".format(from_ip_port, to_ip_port))
-                    
-
-                # print(ips_arr)
-                # print(from_ip)
-                # if from_ip not in ips_arr and to_ip not in ips_arr[from_ip]["ips"]:
-                #     # Save for future reference
-                #     if from_ip not in ips_arr:
-                #         ips_arr.append(from_ip)
-                #     ips_arr[from_ip].append({to_ip})
-                #     # Print it out
-                #     print("New connection: {} -> {}".format(from_ip, to_ip))
-        return ips_arr
+                # Save connection for future reference
+                new_connection(from_ip, from_port, to_ip, to_port)
+            return ips_arr
     except IOError:
         print("Failed to open/read from file '%s'" % (path))
 
 def parse_line(line):
-    """Parses a line from /proc/net/tcp.txt and returns the local address and the remote address
+    """Parses a line from /proc/net/tcp and returns the local address and the remote address
 
     The expected format is described here: https://www.kernel.org/doc/Documentation/networking/proc_net_tcp.txt
     
@@ -102,6 +84,16 @@ def translate_addr_from_hex(hex_addr):
     return ip, port
 
 def ports_scanned_detector(port_times):
+    """Detects if ports are being scanned
+
+    Returns an array of ports scanned, if a scan is detected. 
+    A scan has been detected if the same from_ip and to_ip are being hit
+    but the to_ports are different, and three or more different ports were hit in less than 60 seconds
+    
+    Keyword arguments:
+    port_times -- An array of objects containing the ports that were hit, and the iso timestamp they were hit
+                  For example: {"port": 80, "time": 2022-03-25T22:46:41+0000}
+    """
     new_date = datetime.datetime.now()
     ports_scanned_in_last_min = []
     for obj in port_times:
@@ -115,9 +107,28 @@ def ports_scanned_detector(port_times):
     return []
 
 def get_now():
+    """Returns the current time in datetime's iso format"""
     return datetime.datetime.now().isoformat()
 
-    # print(port_times)
+def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
+    """Prints, saves, and counts a new connection
+
+    This will print out a new connection "New connection: 1.1.1.1:80 -> 2.2.2.2:80"
+    This will also save the new connection into ips_arr
+    This will also count the new connection for Prometheus metrics
+
+    Keyword arguments:
+    ips_arr -- The place to store all new connections
+    from_ip -- The IP address where the connection is coming from
+    from_port -- The port where the connection is coming from
+    to_ip -- The IP address where the connection is going to
+    to_port -- The port where the connection is going to
+    """
+    fmt_str = "{} -> {}".format(from_ip, to_ip)
+    
+    ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
+    print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
+    c.inc()
 
 if __name__ == "__main__":
     main()
