@@ -1,11 +1,11 @@
-from prometheus_client import Counter
+from prometheus_client import Counter, start_http_server
 import socket
 import struct
 import time
 import datetime
 
 recorded_addrs = {}
-c = Counter('my_failures', 'Description of counter')
+c = Counter('new_network_hits', 'New Network Hits')
 
 def main():
     while (True):
@@ -38,17 +38,18 @@ def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
                 if fmt_str == ip:
                     scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
                     if scanned_ports:
+                        block_ip_ufw(from_ip)
                         print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
                     # Save connection for future reference
-                    new_connection(from_ip, from_port, to_ip, to_port)
+                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
                     break
                 else:
                     # Save connection for future reference
-                    new_connection(from_ip, from_port, to_ip, to_port)
+                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
                     break
             else:
                 # Save connection for future reference
-                new_connection(from_ip, from_port, to_ip, to_port)
+                new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
             return ips_arr
     except IOError:
         print("Failed to open/read from file '%s'" % (path))
@@ -126,9 +127,32 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
     
+    if fmt_str not in ips_arr:
+        ips_arr[fmt_str] = []
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
 
+def block_ip_ufw(from_ip, path="/firewall/user.rules"):
+    """
+    Adds a block rule in UFW
+    """
+    match_string = "### RULES ###"
+    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
+-A ufw-user-input -s ${from_ip} -j DROP"""
+    with open(path, 'r+') as fd:
+        contents = fd.readlines()
+        if match_string in contents[-1]:
+            contents.append(insert_string)
+        else:
+            for index, line in enumerate(contents):
+                if match_string in line and insert_string not in contents[index + 1]:
+                    contents.insert(index + 1, insert_string)
+                    break
+    fd.seek(0)
+    fd.writelines(contents)
+    print(from_ip)
+
 if __name__ == "__main__":
+    start_http_server(5000)
     main()
