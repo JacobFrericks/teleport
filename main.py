@@ -1,18 +1,18 @@
-from prometheus_client import Counter
+from prometheus_client import Counter, start_http_server
 import socket
 import struct
 import time
 import datetime
 
 recorded_addrs = {}
-c = Counter('my_failures', 'Description of counter')
+c = Counter('new_network_hits', 'New Network Hits')
 
 def main():
     while (True):
         analyze_file()
         time.sleep(10)
 
-def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
+def analyze_file(path="./tcp", ips_arr=recorded_addrs):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
@@ -40,15 +40,15 @@ def analyze_file(path="/network/tcp", ips_arr=recorded_addrs):
                     if scanned_ports:
                         print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
                     # Save connection for future reference
-                    new_connection(from_ip, from_port, to_ip, to_port)
+                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
                     break
                 else:
                     # Save connection for future reference
-                    new_connection(from_ip, from_port, to_ip, to_port)
+                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
                     break
             else:
                 # Save connection for future reference
-                new_connection(from_ip, from_port, to_ip, to_port)
+                new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
             return ips_arr
     except IOError:
         print("Failed to open/read from file '%s'" % (path))
@@ -126,9 +126,12 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
     
+    if fmt_str not in ips_arr:
+        ips_arr[fmt_str] = []
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
 
 if __name__ == "__main__":
+    start_http_server(5000)
     main()
