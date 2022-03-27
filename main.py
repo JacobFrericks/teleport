@@ -7,10 +7,12 @@ import datetime
 recorded_addrs = {}
 c = Counter('new_network_hits', 'New Network Hits')
 
+
 def main():
     while (True):
         analyze_file()
         time.sleep(10)
+
 
 def analyze_file(path="./tcp", ips_arr=recorded_addrs):
     """Reads the given file and outputs all new connections
@@ -25,7 +27,7 @@ def analyze_file(path="./tcp", ips_arr=recorded_addrs):
         for line in f:
             # Skip header line, if it exists
             if "local_address" in line:
-               continue
+                continue
             # Get both the "from" and "to" ips and their ports
             from_ip, to_ip = parse_line(line)
             # Translate them from hex
@@ -34,11 +36,10 @@ def analyze_file(path="./tcp", ips_arr=recorded_addrs):
 
             # Port scan
             fmt_str = "{} -> {}".format(from_ip, to_ip)
-            for ip in ips_arr:    
+            for ip in ips_arr:
                 if fmt_str == ip:
                     scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
                     if scanned_ports:
-                        block_ip_ufw(from_ip)
                         print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
                     # Save connection for future reference
                     new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
@@ -54,6 +55,7 @@ def analyze_file(path="./tcp", ips_arr=recorded_addrs):
     except IOError:
         print("Failed to open/read from file '%s'" % (path))
 
+
 def parse_line(line):
     """Parses a line from /proc/net/tcp and returns the local address and the remote address
 
@@ -67,6 +69,7 @@ def parse_line(line):
     remote_addr = arr[2]
 
     return local_addr, remote_addr
+
 
 def translate_addr_from_hex(hex_addr):
     """Translates an IP address from hex to a human readable format
@@ -83,6 +86,7 @@ def translate_addr_from_hex(hex_addr):
     port = str(int(hex_port, 16))
 
     return ip, port
+
 
 def ports_scanned_detector(port_times):
     """Detects if ports are being scanned
@@ -107,9 +111,11 @@ def ports_scanned_detector(port_times):
         return ports_scanned_in_last_min
     return []
 
+
 def get_now():
     """Returns the current time in datetime's iso format"""
     return datetime.datetime.now().isoformat()
+
 
 def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     """Prints, saves, and counts a new connection
@@ -126,32 +132,13 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     to_port -- The port where the connection is going to
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
-    
+
     if fmt_str not in ips_arr:
         ips_arr[fmt_str] = []
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
 
-def block_ip_ufw(from_ip, path="/firewall/user.rules"):
-    """
-    Adds a block rule in UFW
-    """
-    match_string = "### RULES ###"
-    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
--A ufw-user-input -s ${from_ip} -j DROP"""
-    with open(path, 'r+') as fd:
-        contents = fd.readlines()
-        if match_string in contents[-1]:
-            contents.append(insert_string)
-        else:
-            for index, line in enumerate(contents):
-                if match_string in line and insert_string not in contents[index + 1]:
-                    contents.insert(index + 1, insert_string)
-                    break
-    fd.seek(0)
-    fd.writelines(contents)
-    print(from_ip)
 
 if __name__ == "__main__":
     start_http_server(5000)
