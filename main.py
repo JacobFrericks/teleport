@@ -2,58 +2,52 @@ from prometheus_client import Counter, start_http_server
 import socket
 import struct
 import time
-import datetime
+from datetime import datetime
+from scapy.all import *
 
 recorded_addrs = {}
 c = Counter('new_network_hits', 'New Network Hits')
 
-
-def main():
-    while (True):
-        analyze_file()
-        time.sleep(10)
+recorded_addrs = {}
 
 
-def analyze_file(path="./tcp", ips_arr=recorded_addrs):
+def analyze_network(pkt, ips_arr=recorded_addrs):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
     path -- (optional) The path to the file to read
     ip_arr -- (optional) The in-memory array that stores all seen connections
     """
+    from_ip = from_port = to_ip = to_port = ""
+    if IP in pkt:
+        from_ip = pkt[IP].src
+        to_ip = pkt[IP].dst
+    if TCP in pkt:
+        from_port = pkt[TCP].sport
+        to_port = pkt[TCP].dport
 
-    try:
-        f = open(path, "r")
-        for line in f:
-            # Skip header line, if it exists
-            if "local_address" in line:
-                continue
-            # Get both the "from" and "to" ips and their ports
-            from_ip, to_ip = parse_line(line)
-            # Translate them from hex
-            from_ip, from_port = translate_addr_from_hex(from_ip)
-            to_ip, to_port = translate_addr_from_hex(to_ip)
+    if from_ip == "" or to_ip == "" or to_port == "":
+        return ""
 
-            # Port scan
-            fmt_str = "{} -> {}".format(from_ip, to_ip)
-            for ip in ips_arr:
-                if fmt_str == ip:
-                    scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
-                    if scanned_ports:
-                        print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
-                    # Save connection for future reference
-                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-                    break
-                else:
-                    # Save connection for future reference
-                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-                    break
-            else:
-                # Save connection for future reference
-                new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-            return ips_arr
-    except IOError:
-        print("Failed to open/read from file '%s'" % (path))
+    # Port scan
+    fmt_str = "{} -> {}".format(from_ip, to_ip)
+    for ip in ips_arr:
+        if fmt_str == ip:
+            scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
+            if scanned_ports:
+                block_ip_ufw(from_ip)
+                print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
+            # Save connection for future reference
+            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            break
+        else:
+            # Save connection for future reference
+            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            break
+    else:
+        # Save connection for future reference
+        new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+    return ips_arr
 
 
 def parse_line(line):
@@ -99,11 +93,11 @@ def ports_scanned_detector(port_times):
     port_times -- An array of objects containing the ports that were hit, and the iso timestamp they were hit
                   For example: {"port": 80, "time": 2022-03-25T22:46:41+0000}
     """
-    new_date = datetime.datetime.now()
+    new_date = datetime.now()
     ports_scanned_in_last_min = []
     for obj in port_times:
         if obj["port"] not in ports_scanned_in_last_min:
-            old_date = datetime.datetime.fromisoformat(obj["time"])
+            old_date = datetime.fromisoformat(obj["time"])
             date_diff = new_date - old_date
             if date_diff.total_seconds() <= 60:
                 ports_scanned_in_last_min.append(obj["port"])
@@ -114,7 +108,7 @@ def ports_scanned_detector(port_times):
 
 def get_now():
     """Returns the current time in datetime's iso format"""
-    return datetime.datetime.now().isoformat()
+    return datetime.now().isoformat()
 
 
 def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
@@ -140,6 +134,48 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     c.inc()
 
 
+def block_ip_ufw(from_ip, path="/firewall/user.rules"):
+    """
+    Adds a block rule in UFW
+    """
+    match_string = "### RULES ###"
+    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
+-A ufw-user-input -s ${from_ip} -j DROP"""
+    with open(path, 'r+') as fd:
+        contents = fd.readlines()
+        if match_string in contents[-1]:
+            contents.append(insert_string)
+        else:
+            for index, line in enumerate(contents):
+                if match_string in line and insert_string not in contents[index + 1]:
+                    contents.insert(index + 1, insert_string)
+                    break
+    fd.seek(0)
+    fd.writelines(contents)
+    print(from_ip)
+
 if __name__ == "__main__":
     start_http_server(5000)
-    main()
+    sniff(filter="ip", prn=analyze_network)
+
+
+# #!/usr/bin/env python
+# from scapy.all import *
+#
+#
+# def print_summary(pkt):
+#     if IP in pkt:
+#         ip_src = pkt[IP].src
+#         ip_dst = pkt[IP].dst
+#         print("test: ip_src")
+#     if TCP in pkt:
+#         tcp_sport = pkt[TCP].sport
+#         tcp_dport = pkt[TCP].dport
+#
+#         print(" IP src " + str(ip_src) + " TCP sport " + str(tcp_sport))
+#         print(" IP dst " + str(ip_dst) + " TCP dport " + str(tcp_dport))
+#
+#
+# sniff(filter="ip", prn=print_summary)
+# # or it possible to filter with filter parameter...!
+# sniff(filter="ip and host 192.168.0.1", prn=print_summary)
