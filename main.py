@@ -38,6 +38,7 @@ def analyze_file(path="./tcp", ips_arr=recorded_addrs):
                 if fmt_str == ip:
                     scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
                     if scanned_ports:
+                        block_ip_ufw(from_ip)
                         print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
                     # Save connection for future reference
                     new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
@@ -131,6 +132,26 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
+
+def block_ip_ufw(from_ip, path="/firewall/user.rules"):
+    """
+    Adds a block rule in UFW
+    """
+    match_string = "### RULES ###"
+    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
+-A ufw-user-input -s ${from_ip} -j DROP"""
+    with open(path, 'r+') as fd:
+        contents = fd.readlines()
+        if match_string in contents[-1]:
+            contents.append(insert_string)
+        else:
+            for index, line in enumerate(contents):
+                if match_string in line and insert_string not in contents[index + 1]:
+                    contents.insert(index + 1, insert_string)
+                    break
+    fd.seek(0)
+    fd.writelines(contents)
+    print(from_ip)
 
 if __name__ == "__main__":
     start_http_server(5000)
