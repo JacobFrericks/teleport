@@ -8,7 +8,7 @@ run:
 	python3 main.py
 
 reload-firewall:
-	./reload_ufw.sh &
+	sudo ./reload_ufw.sh > /dev/null 2>&1 &
 
 clean:
 	echo "{}" > './recorded_addrs_file.json'
