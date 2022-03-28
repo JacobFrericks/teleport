@@ -18,15 +18,8 @@ def analyze_network(pkt, ips_arr=recorded_addrs):
     path -- (optional) The path to the file to read
     ip_arr -- (optional) The in-memory array that stores all seen connections
     """
-    from_ip = from_port = to_ip = to_port = ""
-    if IP in pkt:
-        from_ip = pkt[IP].src
-        to_ip = pkt[IP].dst
-    if TCP in pkt:
-        from_port = pkt[TCP].sport
-        to_port = pkt[TCP].dport
-
-    if from_ip == "" or to_ip == "" or to_port == "":
+    from_ip, from_port, to_ip, to_port = interpret_packet(pkt)
+    if from_ip == "":
         return ""
 
     # Port scan
@@ -54,7 +47,7 @@ def parse_line(line):
     """Parses a line from /proc/net/tcp and returns the local address and the remote address
 
     The expected format is described here: https://www.kernel.org/doc/Documentation/networking/proc_net_tcp.txt
-    
+
     Keyword arguments:
     line -- the string that will be parsed
     """
@@ -69,7 +62,7 @@ def translate_addr_from_hex(hex_addr):
     """Translates an IP address from hex to a human readable format
 
     For example: 0100007F:0050 == 127.0.0.1:80 and E10FA20A:01BB == 10.162.15.225:443
-    
+
     Keyword arguments:
     hex_addr -- the hex string in the format ip:port
     """
@@ -85,10 +78,10 @@ def translate_addr_from_hex(hex_addr):
 def ports_scanned_detector(port_times):
     """Detects if ports are being scanned
 
-    Returns an array of ports scanned, if a scan is detected. 
+    Returns an array of ports scanned, if a scan is detected.
     A scan has been detected if the same from_ip and to_ip are being hit
     but the to_ports are different, and three or more different ports were hit in less than 60 seconds
-    
+
     Keyword arguments:
     port_times -- An array of objects containing the ports that were hit, and the iso timestamp they were hit
                   For example: {"port": 80, "time": 2022-03-25T22:46:41+0000}
@@ -154,9 +147,23 @@ def block_ip_ufw(from_ip, path="/firewall/user.rules"):
     fd.writelines(contents)
     print(from_ip)
 
+
+def interpret_packet(pkt):
+    from_ip = from_port = to_ip = to_port = ""
+    if "IP" in pkt:
+        from_ip = pkt["IP"].src
+        to_ip = pkt["IP"].dst
+    if "TCP" in pkt:
+        from_port = pkt["TCP"].sport
+        to_port = pkt["TCP"].dport
+
+    return from_ip, from_port, to_ip, to_port
+
+
 if __name__ == "__main__":
+    print("*** Start")
     start_http_server(5000)
-    sniff(filter="ip", prn=analyze_network)
+    sniff(filter="tcp and tcp.flags.syn==1 and tcp.flags.ack==0", prn=analyze_network)
 
 
 # #!/usr/bin/env python
@@ -167,7 +174,7 @@ if __name__ == "__main__":
 #     if IP in pkt:
 #         ip_src = pkt[IP].src
 #         ip_dst = pkt[IP].dst
-#         print("test: ip_src")
+#         print("test: {}".format(ip_src))
 #     if TCP in pkt:
 #         tcp_sport = pkt[TCP].sport
 #         tcp_dport = pkt[TCP].dport
@@ -177,5 +184,3 @@ if __name__ == "__main__":
 #
 #
 # sniff(filter="ip", prn=print_summary)
-# # or it possible to filter with filter parameter...!
-# sniff(filter="ip and host 192.168.0.1", prn=print_summary)
