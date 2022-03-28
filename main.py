@@ -2,22 +2,26 @@ from prometheus_client import Counter, start_http_server
 import socket
 import struct
 import time
+import json
 from datetime import datetime
 from scapy.all import *
 
-recorded_addrs = {}
 c = Counter('new_network_hits', 'New Network Hits')
+recorded_addrs_file = './recorded_addrs_file.json'
 
-recorded_addrs = {}
 
-
-def analyze_network(pkt, ips=recorded_addrs):
+def analyze_network(pkt, firewall_location="/firewall/user.rules"):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
     path -- (optional) The path to the file to read
     ip_arr -- (optional) The in-memory array that stores all seen connections
     """
+    # Load from file
+    # Opening JSON file
+    with open(recorded_addrs_file) as json_file:
+        ips = json.load(json_file)
+
     from_ip, from_port, to_ip, to_port = interpret_packet(pkt)
     if from_ip == "" or to_port == "":
         return ""
@@ -26,12 +30,15 @@ def analyze_network(pkt, ips=recorded_addrs):
     fmt_str = "{} -> {}".format(from_ip, to_ip)
     for ip in ips:
         if fmt_str == ip:
+            # Save connection for future reference
+            # Technically this is not a new connection, so we will not output it. However, for port scanning to work,
+            # we need to save the IP and the port
+            new_connection(ips, from_ip, from_port, to_ip, to_port, output=False)
+
             scanned_ports = ports_scanned_detector(ips[fmt_str])
             if scanned_ports:
-                block_ip_ufw(from_ip)
+                block_ip_ufw(from_ip, firewall_location)
                 print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
-            # Save connection for future reference
-            new_connection(ips, from_ip, from_port, to_ip, to_port)
             break
         else:
             # Save connection for future reference
@@ -72,7 +79,7 @@ def get_now():
     return datetime.now().isoformat()
 
 
-def new_connection(ips, from_ip, from_port, to_ip, to_port):
+def new_connection(ips, from_ip, from_port, to_ip, to_port, output=True):
     """Prints, saves, and counts a new connection
 
     This will print out a new connection "New connection: 1.1.1.1:80 -> 2.2.2.2:80"
@@ -85,14 +92,23 @@ def new_connection(ips, from_ip, from_port, to_ip, to_port):
     from_port -- The port where the connection is coming from
     to_ip -- The IP address where the connection is going to
     to_port -- The port where the connection is going to
+    output -- Determines if it should be printed to the console or counted for prometheus
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
 
     if fmt_str not in ips:
         ips[fmt_str] = []
     ips[fmt_str].append({"port": to_port, "time": get_now()})
-    print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
-    c.inc()
+    if output:
+        print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
+        c.inc()
+
+    # Save to file
+    ips_json = json.dumps(ips)
+    f = open(recorded_addrs_file, "w")
+    f.write(ips_json)
+    f.close()
+
     return ips
 
 
@@ -104,10 +120,10 @@ def block_ip_ufw(from_ip, path="/firewall/user.rules"):
     from_ip -- The IP to block
     path -- The path to the user.rules file
     """
-    test = "### tuple ### deny any any 0.0.0.0/0 any {} in".format(from_ip)
-    test2 = "-A ufw-user-input -s {} -j DROP".format(from_ip)
+    str1 = "### tuple ### deny any any 0.0.0.0/0 any {} in".format(from_ip)
+    str2 = "-A ufw-user-input -s {} -j DROP".format(from_ip)
     match_string = "### RULES ###"
-    insert_string = "\n{}\n{}\n".format(test, test2)
+    insert_string = "\n{}\n{}\n".format(str1, str2)
     with open(path, 'r+') as fd:
         contents = fd.readlines()
         if match_string in contents[-1]:

@@ -6,7 +6,7 @@ Please answer all questions in response to your final solution. For example: if 
 
 2. How would you make this solution better?
 
-   I would suggest saving the dictionary that contains the IPs into a database (or even a file), so you can reboot the program without issues
+   The firewall ufw requires reloading before the rules take effect. This would best be done via the container, but there are some security concerns with running commands from the container on the host. Doing it would have a more immediate effect, however.
 
 3. Is it possible for this program to miss a connection?
 
@@ -24,7 +24,8 @@ Please answer all questions in response to your final solution. For example: if 
 
 6. Is there anything else you would test if you had more time?
 
-   I would write an integration test. I was unable to send TCP packets to this program, and an integration test would be a reproducible way to do that.
+   I would write a full integration test. I was unable to send TCP packets to this program, and an integration test would be a reproducible way to do that.
+   I did create an integration test (test_integration_* in main_test.py), but these don't start with the main function. That would be an ideal integration test.
 
 7. What is the most important tool, script, or technique you have for solving problems in production? Explain why this tool/script/technique is the most important.
 
