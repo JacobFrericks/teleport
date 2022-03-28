@@ -7,6 +7,13 @@ run:
 	pip3 install -r requirements.txt
 	python3 main.py
 
+reload-firewall:
+	./reload_ufw.sh &
+
+clean:
+	echo "{}" > './recorded_addrs_file.json'
+	/bin/cp -rf ./user.rules_orig ./user.rules
+
 docker-build:
 	docker build -t network_monitor:latest .
 

@@ -18,6 +18,10 @@ If you want to run this outside of a docker container, you can run:
 `python3 main.py`
 Or simply run `make run`
 
+Don't forget to consistently update your firewall by running `make reload-firewall` otherwise the new firewall rules will not take effect!
+
+If the program gets in a bad state, or if you want to start over with recording IPs, simply run `make clean`.
+
 # Test
 Run `pip install -U pytest` to install pytest. Then run `make test`.
-See `.github/workflows/python-app.yml` for CI testing
+See `.github/workflows/python-app.yml` for CI testing.
