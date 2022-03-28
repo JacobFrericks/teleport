@@ -2,104 +2,63 @@ from prometheus_client import Counter, start_http_server
 import socket
 import struct
 import time
-import datetime
+from datetime import datetime
+from scapy.all import *
 
 recorded_addrs = {}
 c = Counter('new_network_hits', 'New Network Hits')
 
-def main():
-    while (True):
-        analyze_file()
-        time.sleep(10)
+recorded_addrs = {}
 
-def analyze_file(path="./tcp", ips_arr=recorded_addrs):
+
+def analyze_network(pkt, ips_arr=recorded_addrs):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
     path -- (optional) The path to the file to read
     ip_arr -- (optional) The in-memory array that stores all seen connections
     """
+    from_ip, from_port, to_ip, to_port = interpret_packet(pkt)
+    if from_ip == "" or to_port == "":
+        return ""
 
-    try:
-        f = open(path, "r")
-        for line in f:
-            # Skip header line, if it exists
-            if "local_address" in line:
-               continue
-            # Get both the "from" and "to" ips and their ports
-            from_ip, to_ip = parse_line(line)
-            # Translate them from hex
-            from_ip, from_port = translate_addr_from_hex(from_ip)
-            to_ip, to_port = translate_addr_from_hex(to_ip)
+    # Port scan
+    fmt_str = "{} -> {}".format(from_ip, to_ip)
+    for ip in ips_arr:
+        if fmt_str == ip:
+            scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
+            if scanned_ports:
+                block_ip_ufw(from_ip)
+                print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
+            # Save connection for future reference
+            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            break
+        else:
+            # Save connection for future reference
+            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            break
+    else:
+        # Save connection for future reference
+        new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+    return ips_arr
 
-            # Port scan
-            fmt_str = "{} -> {}".format(from_ip, to_ip)
-            for ip in ips_arr:    
-                if fmt_str == ip:
-                    scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
-                    if scanned_ports:
-                        block_ip_ufw(from_ip)
-                        print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
-                    # Save connection for future reference
-                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-                    break
-                else:
-                    # Save connection for future reference
-                    new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-                    break
-            else:
-                # Save connection for future reference
-                new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-            return ips_arr
-    except IOError:
-        print("Failed to open/read from file '%s'" % (path))
-
-def parse_line(line):
-    """Parses a line from /proc/net/tcp and returns the local address and the remote address
-
-    The expected format is described here: https://www.kernel.org/doc/Documentation/networking/proc_net_tcp.txt
-    
-    Keyword arguments:
-    line -- the string that will be parsed
-    """
-    arr = line.strip().split()
-    local_addr = arr[1]
-    remote_addr = arr[2]
-
-    return local_addr, remote_addr
-
-def translate_addr_from_hex(hex_addr):
-    """Translates an IP address from hex to a human readable format
-
-    For example: 0100007F:0050 == 127.0.0.1:80 and E10FA20A:01BB == 10.162.15.225:443
-    
-    Keyword arguments:
-    hex_addr -- the hex string in the format ip:port
-    """
-    hex_ip, hex_port = hex_addr.split(':')
-    ip = int(hex_ip, 16)
-    ip = socket.inet_ntoa(struct.pack("<L", ip))
-
-    port = str(int(hex_port, 16))
-
-    return ip, port
 
 def ports_scanned_detector(port_times):
     """Detects if ports are being scanned
 
-    Returns an array of ports scanned, if a scan is detected. 
+    Returns an array of ports scanned, if a scan is detected.
     A scan has been detected if the same from_ip and to_ip are being hit
     but the to_ports are different, and three or more different ports were hit in less than 60 seconds
-    
+
     Keyword arguments:
     port_times -- An array of objects containing the ports that were hit, and the iso timestamp they were hit
                   For example: {"port": 80, "time": 2022-03-25T22:46:41+0000}
     """
-    new_date = datetime.datetime.now()
+    new_date = datetime.now()
     ports_scanned_in_last_min = []
     for obj in port_times:
         if obj["port"] not in ports_scanned_in_last_min:
-            old_date = datetime.datetime.fromisoformat(obj["time"])
+            old_date = datetime.fromisoformat(obj["time"])
             date_diff = new_date - old_date
             if date_diff.total_seconds() <= 60:
                 ports_scanned_in_last_min.append(obj["port"])
@@ -107,9 +66,11 @@ def ports_scanned_detector(port_times):
         return ports_scanned_in_last_min
     return []
 
+
 def get_now():
     """Returns the current time in datetime's iso format"""
-    return datetime.datetime.now().isoformat()
+    return datetime.now().isoformat()
+
 
 def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     """Prints, saves, and counts a new connection
@@ -126,20 +87,27 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     to_port -- The port where the connection is going to
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
-    
+
     if fmt_str not in ips_arr:
         ips_arr[fmt_str] = []
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
+    return ips_arr
+
 
 def block_ip_ufw(from_ip, path="/firewall/user.rules"):
     """
     Adds a block rule in UFW
+
+    Keyword arguments:
+    from_ip -- The IP to block
+    path -- The path to the user.rules file
     """
+    test = "### tuple ### deny any any 0.0.0.0/0 any {} in".format(from_ip)
+    test2 = "-A ufw-user-input -s {} -j DROP".format(from_ip)
     match_string = "### RULES ###"
-    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
--A ufw-user-input -s ${from_ip} -j DROP"""
+    insert_string = "\n{}\n{}\n".format(test, test2)
     with open(path, 'r+') as fd:
         contents = fd.readlines()
         if match_string in contents[-1]:
@@ -149,10 +117,29 @@ def block_ip_ufw(from_ip, path="/firewall/user.rules"):
                 if match_string in line and insert_string not in contents[index + 1]:
                     contents.insert(index + 1, insert_string)
                     break
-    fd.seek(0)
-    fd.writelines(contents)
-    print(from_ip)
+        fd.seek(0)
+        fd.writelines(contents)
+
+
+def interpret_packet(pkt):
+    """
+    Gets the to and from IP and Port from the packet
+
+    Keyword arguments:
+    pkt -- The packet
+    """
+    from_ip = from_port = to_ip = to_port = ""
+    if "IP" in pkt:
+        from_ip = pkt["IP"].src
+        to_ip = pkt["IP"].dst
+    if "TCP" in pkt:
+        from_port = pkt["TCP"].sport
+        to_port = pkt["TCP"].dport
+
+    return from_ip, from_port, to_ip, to_port
+
 
 if __name__ == "__main__":
     start_http_server(5000)
-    main()
+    # sniff(prn=analyze_network)
+    sniff(filter="tcp and tcp.flags.syn==1 and tcp.flags.ack==0", prn=analyze_network)

@@ -133,3 +133,4 @@ bin/
 pyvenv.cfg
 include/
 share/
+.idea/
