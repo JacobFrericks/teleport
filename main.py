@@ -141,24 +141,5 @@ def interpret_packet(pkt):
 
 if __name__ == "__main__":
     start_http_server(5000)
+    # sniff(prn=analyze_network)
     sniff(filter="tcp and tcp.flags.syn==1 and tcp.flags.ack==0", prn=analyze_network)
-
-
-# #!/usr/bin/env python
-# from scapy.all import *
-#
-#
-# def print_summary(pkt):
-#     if IP in pkt:
-#         ip_src = pkt[IP].src
-#         ip_dst = pkt[IP].dst
-#         print("test: {}".format(ip_src))
-#     if TCP in pkt:
-#         tcp_sport = pkt[TCP].sport
-#         tcp_dport = pkt[TCP].dport
-#
-#         print(" IP src " + str(ip_src) + " TCP sport " + str(tcp_sport))
-#         print(" IP dst " + str(ip_dst) + " TCP dport " + str(tcp_dport))
-#
-#
-# sniff(filter="ip", prn=print_summary)

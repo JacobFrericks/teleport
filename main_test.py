@@ -100,6 +100,11 @@ class TestParseLine(unittest.TestCase):
         self.assertTrue(to_port == 222)
         self.assertTrue(from_port == 333)
 
+    def test_me(self):
+        pkt = IP(dst="192.168.100.123", src="192.168.100.144")/TCP(sport=333, dport=222, seq=112344)/"Sequence number 112344"
+        send(pkt)
+        sendp(packet, iface="en0")
+
 
 if __name__ == '__main__':
     unittest.main()

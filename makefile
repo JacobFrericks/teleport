@@ -11,7 +11,7 @@ docker-build:
 	docker build -t network_monitor:latest .
 
 docker-run:
-	docker run --rm -p 5000:5000 -v /proc/net:/network -v /etc/ufw:/firewall --name network_monitor network_monitor:latest
+	docker run --rm -p 5000:5000 -v /etc/ufw:/firewall --name network_monitor network_monitor:latest
 
 docker-run-local:
-	docker run --rm -p 5000:5000 -v ${PWD}:/network -v ${PWD}:/firewall --network host --name network_monitor network_monitor:latest
+	docker run --rm -p 5000:5000 -v ${PWD}:/firewall --network host --name network_monitor network_monitor:latest
