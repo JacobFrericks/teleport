@@ -11,7 +11,7 @@ c = Counter('new_network_hits', 'New Network Hits')
 recorded_addrs = {}
 
 
-def analyze_network(pkt, ips_arr=recorded_addrs):
+def analyze_network(pkt, ips=recorded_addrs):
     """Reads the given file and outputs all new connections
 
     Keyword arguments:
@@ -24,23 +24,23 @@ def analyze_network(pkt, ips_arr=recorded_addrs):
 
     # Port scan
     fmt_str = "{} -> {}".format(from_ip, to_ip)
-    for ip in ips_arr:
+    for ip in ips:
         if fmt_str == ip:
-            scanned_ports = ports_scanned_detector(ips_arr[fmt_str])
+            scanned_ports = ports_scanned_detector(ips[fmt_str])
             if scanned_ports:
                 block_ip_ufw(from_ip)
                 print("Port scan detected: {} -> {} on ports {}".format(from_ip, to_ip, scanned_ports))
             # Save connection for future reference
-            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            new_connection(ips, from_ip, from_port, to_ip, to_port)
             break
         else:
             # Save connection for future reference
-            new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
+            new_connection(ips, from_ip, from_port, to_ip, to_port)
             break
     else:
         # Save connection for future reference
-        new_connection(ips_arr, from_ip, from_port, to_ip, to_port)
-    return ips_arr
+        new_connection(ips, from_ip, from_port, to_ip, to_port)
+    return ips
 
 
 def ports_scanned_detector(port_times):
@@ -72,15 +72,15 @@ def get_now():
     return datetime.now().isoformat()
 
 
-def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
+def new_connection(ips, from_ip, from_port, to_ip, to_port):
     """Prints, saves, and counts a new connection
 
     This will print out a new connection "New connection: 1.1.1.1:80 -> 2.2.2.2:80"
-    This will also save the new connection into ips_arr
+    This will also save the new connection into ips
     This will also count the new connection for Prometheus metrics
 
     Keyword arguments:
-    ips_arr -- The place to store all new connections
+    ips -- The place to store all new connections
     from_ip -- The IP address where the connection is coming from
     from_port -- The port where the connection is coming from
     to_ip -- The IP address where the connection is going to
@@ -88,12 +88,12 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     """
     fmt_str = "{} -> {}".format(from_ip, to_ip)
 
-    if fmt_str not in ips_arr:
-        ips_arr[fmt_str] = []
-    ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
+    if fmt_str not in ips:
+        ips[fmt_str] = []
+    ips[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
-    return ips_arr
+    return ips
 
 
 def block_ip_ufw(from_ip, path="/firewall/user.rules"):
@@ -141,5 +141,5 @@ def interpret_packet(pkt):
 
 if __name__ == "__main__":
     start_http_server(5000)
-    # sniff(prn=analyze_network)
-    sniff(filter="tcp and tcp.flags.syn==1 and tcp.flags.ack==0", prn=analyze_network)
+    # sniff(filter="tcp", prn=analyze_network)
+    sniff(filter="tcp[tcpflags] & (tcp-syn|tcp-ack) == tcp-syn", prn=analyze_network)
