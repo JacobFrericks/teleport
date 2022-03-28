@@ -19,7 +19,7 @@ def analyze_network(pkt, ips_arr=recorded_addrs):
     ip_arr -- (optional) The in-memory array that stores all seen connections
     """
     from_ip, from_port, to_ip, to_port = interpret_packet(pkt)
-    if from_ip == "":
+    if from_ip == "" or to_port == "":
         return ""
 
     # Port scan
