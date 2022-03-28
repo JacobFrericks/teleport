@@ -43,38 +43,6 @@ def analyze_network(pkt, ips_arr=recorded_addrs):
     return ips_arr
 
 
-def parse_line(line):
-    """Parses a line from /proc/net/tcp and returns the local address and the remote address
-
-    The expected format is described here: https://www.kernel.org/doc/Documentation/networking/proc_net_tcp.txt
-
-    Keyword arguments:
-    line -- the string that will be parsed
-    """
-    arr = line.strip().split()
-    local_addr = arr[1]
-    remote_addr = arr[2]
-
-    return local_addr, remote_addr
-
-
-def translate_addr_from_hex(hex_addr):
-    """Translates an IP address from hex to a human readable format
-
-    For example: 0100007F:0050 == 127.0.0.1:80 and E10FA20A:01BB == 10.162.15.225:443
-
-    Keyword arguments:
-    hex_addr -- the hex string in the format ip:port
-    """
-    hex_ip, hex_port = hex_addr.split(':')
-    ip = int(hex_ip, 16)
-    ip = socket.inet_ntoa(struct.pack("<L", ip))
-
-    port = str(int(hex_port, 16))
-
-    return ip, port
-
-
 def ports_scanned_detector(port_times):
     """Detects if ports are being scanned
 
@@ -125,15 +93,21 @@ def new_connection(ips_arr, from_ip, from_port, to_ip, to_port):
     ips_arr[fmt_str].append({"port": to_port, "time": get_now()})
     print("New connection: {}:{} -> {}:{}".format(from_ip, from_port, to_ip, to_port))
     c.inc()
+    return ips_arr
 
 
 def block_ip_ufw(from_ip, path="/firewall/user.rules"):
     """
     Adds a block rule in UFW
+
+    Keyword arguments:
+    from_ip -- The IP to block
+    path -- The path to the user.rules file
     """
+    test = "### tuple ### deny any any 0.0.0.0/0 any {} in".format(from_ip)
+    test2 = "-A ufw-user-input -s {} -j DROP".format(from_ip)
     match_string = "### RULES ###"
-    insert_string = """### tuple ### deny any any 0.0.0.0/0 any ${from_ip} in
--A ufw-user-input -s ${from_ip} -j DROP"""
+    insert_string = "\n{}\n{}\n".format(test, test2)
     with open(path, 'r+') as fd:
         contents = fd.readlines()
         if match_string in contents[-1]:
@@ -143,12 +117,17 @@ def block_ip_ufw(from_ip, path="/firewall/user.rules"):
                 if match_string in line and insert_string not in contents[index + 1]:
                     contents.insert(index + 1, insert_string)
                     break
-    fd.seek(0)
-    fd.writelines(contents)
-    print(from_ip)
+        fd.seek(0)
+        fd.writelines(contents)
 
 
 def interpret_packet(pkt):
+    """
+    Gets the to and from IP and Port from the packet
+
+    Keyword arguments:
+    pkt -- The packet
+    """
     from_ip = from_port = to_ip = to_port = ""
     if "IP" in pkt:
         from_ip = pkt["IP"].src
@@ -161,7 +140,6 @@ def interpret_packet(pkt):
 
 
 if __name__ == "__main__":
-    print("*** Start")
     start_http_server(5000)
     sniff(filter="tcp and tcp.flags.syn==1 and tcp.flags.ack==0", prn=analyze_network)
 
